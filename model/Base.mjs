@@ -904,8 +904,9 @@ export class Message {
                         || name === "To" //
                         || name === "Cc" //
                         || name === "Bcc" //
-                        || name === "Return-Path"
-                        || name === "Sender" /* TODO: add missing entries */) {
+                        || name === "Return-Path" //
+                        || name === "Reply-To" //
+                        || name === "Sender") {
                     if (! (Array.isArray(value) && value.length >= 2)) {
                         throw new Error(`Invalid address header value for key "${
                                 name}": Must be an array of size>=2`);
