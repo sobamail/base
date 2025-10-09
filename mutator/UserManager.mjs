@@ -13,8 +13,8 @@ import {
 export default class UserManager {
     static id = "usermanager.app.sobamail.com";
     static name = "UserManager";
-    static version = soba.info.version();
-    static releaseChannel = soba.info.releaseChannel();
+    static version = soba.platform.version();
+    static releaseChannel = soba.platform.releaseChannel();
     static objects = [
         AddDomain.KEY,
         AddUser.KEY,
