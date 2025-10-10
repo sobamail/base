@@ -1,4 +1,11 @@
 ﻿
+/**
+ * This module is the Javascript interface to the internal Sobamail objects.
+ *
+ * It is closely tied to a particular version of Sobamail runtime and typically shipped as hardcoded
+ * data inside Sobamail platform binaries.
+ */
+
 export const namespace = "https://sobamail.com/module/base/v1";
 
 import "soba://computer/R1"
@@ -38,8 +45,6 @@ export class NotFoundError extends Error {
             cause = {id : id};
         }
 
-        soba.log.debug(message);
-
         super(message, cause);
     }
 }
@@ -48,8 +53,6 @@ export class BlobDataReadError extends Error {
     constructor(blobId, errCode, errText) {
         const message = `Blob data could not be read`;
         const cause = {blobId : blobId, errCode : errCode, errText : errText};
-
-        soba.log.debug(message);
 
         super(message, {cause : cause});
     }
@@ -68,7 +71,13 @@ export class BlobTransformOffset extends BlobTransform {
         this.offset = offset;
     }
 
-    toJSON() { return {key : this.key, offset : this.offset}; }
+    toJSON() { return this.offset; }
+
+    validate() {
+        if (! (Number.isInteger(this.offset) && this.offset >= 0)) {
+            throw new Error(`Invalid length value '${this.offset}'. Must be a positive integer`);
+        }
+    }
 }
 
 export class BlobTransformLength extends BlobTransform {
@@ -77,13 +86,16 @@ export class BlobTransformLength extends BlobTransform {
     constructor(length) {
         super(BlobTransformLength.KEY);
 
-        if (! Number.isInteger(length)) {
-            throw new Error(`Invalid digest key '${length}'. Expected: A positive integer`);
-        }
         this.length = length;
     }
 
-    toJSON() { return {key : this.key, length : this.length}; }
+    toJSON() { return this.length; }
+
+    validate() {
+        if (! (Number.isInteger(this.length) && this.length >= 0)) {
+            throw new Error(`Invalid length value '${this.length}'. Must be a positive integer`);
+        }
+    }
 }
 
 export class BlobTransformEncoding extends BlobTransform {
@@ -95,47 +107,59 @@ export class BlobTransformEncoding extends BlobTransform {
     constructor(encoding) {
         super(BlobTransformEncoding.KEY);
 
-        BlobTransformEncoding
-        if (! (encoding === 1 || encoding === 2)) {
-            throw new Error(`Invalid encoding value '${
-                    encoding}'. Must be one of [BlobTransformEncoding.Identity, BlobTransformEncoding.Base64]`);
-        }
-
         this.encoding = encoding;
     }
 
-    toJSON() { return {key : this.key, encoding : this.encoding}; }
+    toJSON() { return this.encoding; }
+
+    validate() {
+        if (! (this.encoding === BlobTransformEncoding.Identity
+                    || this.encoding === BlobTransformEncoding.Base64)) {
+            throw new Error(`Invalid encoding value '${
+                    this.encoding}'. Must be one of [BlobTransformEncoding.Identity, BlobTransformEncoding.Base64]`);
+        }
+    }
 }
 
 class BlobTransformNewlineBase extends BlobTransform {
-    constructor(key, numBytes, numTimes) {
+    constructor(key, nlfEntries) {
         super(key);
 
-        this.numBytes = numBytes;
-        this.numTimes = numTimes;
-
-        if (! Number.isInteger(numBytes)) {
-            throw new Error(`Invalid new line frequency '${
-                    numBytes}'. Expected: A strictly positive integer`);
-        }
-
-        if (numBytes < 1) {
-            throw new Error(`Invalid new line frequency '${
-                    numBytes}'. Expected: A strictly positive integer`);
-        }
-
-        if (! Number.isInteger(numTimes)) {
-            throw new Error(
-                    `Invalid new line count '${numTimes}'. Expected: A strictly positive integer`);
-        }
-
-        if (numTimes < 1) {
-            throw new Error(
-                    `Invalid new line c '${numTimes}'. Expected: A strictly positive integer`);
-        }
+        this.nlfEntries = nlfEntries
     }
 
-    toJSON() { return {key : this.key, numBytes : this.numBytes, numTimes : this.numTimes}; }
+    toJSON() { return this.nlfEntries; }
+
+    validate() {
+        if (! (Array.isArray(this.nlfEntries) && this.nlfEntries.length > 0)) {
+            throw new Error(`Invalid nlfEntries value '${
+                    JSON.stringify(
+                            this.nlfEntries)}'. Must be a non-empty Array of Array instances`);
+        }
+
+        let idx = 0;
+        for (const e of this.nlfEntries) {
+            if (! (Array.isArray(e) && e.length != 2)) {
+                throw new Error(
+                        `Invalid nlfEntries[${idx}] value '${e}'. Must be a pair of integers`);
+            }
+
+            const numBytes = e[0];
+            const numTimes = e[1];
+
+            if (! (Number.isInteger(numBytes) && numBytes > 1)) {
+                throw new Error(
+                        `Invalid nl freq '${numBytes}'. Must be a strictly positive integer`);
+            }
+
+            if (! (Number.isInteger(numTimes) && numTimes > 1)) {
+                throw new Error(
+                        `Invalid nl count '${numTimes}'. Must be a strictly positive integer`);
+            }
+
+            ++idx;
+        }
+    }
 }
 
 export class BlobTransformNewlineN extends BlobTransformNewlineBase {
@@ -148,6 +172,25 @@ export class BlobTransformNewlineRN extends BlobTransformNewlineBase {
     constructor(numBytes, numTimes) { super(BlobTransformNewlineRN.KEY, numBytes, numTimes); }
 }
 
+export class BlobTransformCharset extends BlobTransform {
+    static KEY = 6;
+
+    constructor(charset) {
+        super(BlobTransformCharset.KEY);
+
+        this.charset = charset;
+    }
+
+    toJSON() { return {charset : this.charset}; }
+
+    validate() {
+        if (! (isString(this.charset) && this.charset.length > 1)) {
+            // TODO: Maybe validate this against the list of supported codecs?
+            throw new Error(`Invalid charset value '${this.charset}'. Must be a non-empty String`);
+        }
+    }
+}
+
 export class Blob {
     static MAX_SIZE = 1 << 30;
 
@@ -157,17 +200,62 @@ export class Blob {
     static Sha512 = 4;
     static Sha384 = 5;
 
-    constructor(
-            {blobId = "", sizes = new Map(), digests = new Map(), data = null, transforms = null} =
-                    {}) {
+    static CMPR_UNKNOWN = -1;
+    static CMPR_NULL = 0;
+    static CMPR_Z = 1;
+    static CMPR_XZ = 2;
+    static CMPR_ZSTD = 5;
+
+    #transforms;
+
+    constructor({
+        blobId = "",
+        sizes = new Map(),
+        digests = new Map(),
+        data = null,
+        transforms = new Map()
+    } = {}) {
         this.blobId = blobId;
         this.sizes = sizes;
         this.digests = digests;
         this.data = data;
         this.transforms = transforms;
+
+        this.validateInstance();
+    }
+
+    isInline() { return this.data !== null; }
+
+    get transforms() { return this.#transforms }
+
+    set transforms(v) {
+        this.#transforms = v;
+        this.validateTransforms();
+    }
+
+    set size(v) {
+        if (this.isInline()) {
+            throw new Error("Inline blob size is read-only");
+        }
+
+        return this.sizes.set(CMPR_NULL, v)
+    }
+
+    get size() {
+        if (this.data) {
+            return this.data.byteLength;
+        }
+        if (! this.sizes.has(CMPR_NULL)) {
+            return 0;
+        }
+        return this.sizes.get(CMPR_NULL)
     }
 
     toJSON() {
+        if (this.data) {
+            return this.data;
+        }
+
         let retval = {
             blobId : this.blobId,
             sizes : Object.fromEntries(this.sizes),
@@ -175,11 +263,10 @@ export class Blob {
                     Object.entries(Object.fromEntries(this.digests)).map((e) => { //
                         return [ e[0], Object.fromEntries(e[1]) ];
                     })),
-            transforms : this.transforms,
         };
 
-        if (this.data) {
-            retval.data = this.data;
+        if (this.transforms.size > 0) {
+            retval.transforms = Object.fromEntries(this.transforms);
         }
 
         return retval;
@@ -211,25 +298,147 @@ export class Blob {
         }
     }
 
+    validateTransforms() {
+        if (! (this.transforms instanceof Map)) {
+            throw new Error(`Invalid transforms value '${
+                    JSON.stringify(this.transforms)}'. Must be a Map of BlobTransform instances`);
+        }
+
+        let new_xforms = new Map();
+        let changed = false;
+        for (let [k, v] of this.transforms) {
+            switch (k) {
+            case BlobTransformOffset.KEY:
+                if (! (v instanceof BlobTransformOffset)) {
+                    v = new BlobTransformOffset(v);
+                    changed = true;
+                }
+                v.validate();
+                new_xforms.set(BlobTransformOffset.KEY, v);
+                break;
+
+            case BlobTransformLength.KEY:
+                if (! (v instanceof BlobTransformLength)) {
+                    v = new BlobTransfoBlobTransformLengthrmCharset(v);
+                    changed = true;
+                }
+                v.validate();
+                new_xforms.set(BlobTransformLength.KEY, v);
+                break;
+
+            case BlobTransformEncoding.KEY:
+                if (! (v instanceof BlobTransformEncoding)) {
+                    v = new BlobTransformEncoding(v);
+                    changed = true;
+                }
+                v.validate();
+                new_xforms.set(BlobTransformEncoding.KEY, v);
+                break;
+
+            case BlobTransformNewlineN.KEY:
+                if (! (v instanceof BlobTransformNewlineN)) {
+                    v = new BlobTransformNewlineN(v);
+                    changed = true;
+                }
+                v.validate();
+                new_xforms.set(BlobTransformNewlineN.KEY, v);
+                break;
+
+            case BlobTransformNewlineRN.KEY:
+                if (! (v instanceof BlobTransformNewlineRN)) {
+                    v = new BlobTransformNewlineRN(v);
+                    changed = true;
+                }
+                v.validate();
+                new_xforms.set(BlobTransformNewlineRN.KEY, v);
+                break;
+
+            case BlobTransformCharset.KEY:
+                if (! (v instanceof BlobTransformCharset)) {
+                    v = new BlobTransformCharset(v);
+                    changed = true;
+                }
+                v.validate();
+                new_xforms.set(BlobTransformCharset.KEY, v);
+                break;
+
+            default:
+                // FIXME: Improve error message generation
+                throw new Error(`Invalid transforms key '${k}'. Must be one of [0,1,2,3,5,6]`);
+            }
+        }
+
+        if (changed) { // prevent setter stack overflow
+            this.transforms = new_xforms;
+        }
+    }
+
+    validateInstance() {
+        if (this.data) {
+            if (this.data.byteLength === 0) {
+                throw new Error("An inline blob must have non-empty data");
+            }
+
+            if (this.blobId.length !== 0) {
+                throw new Error("An inline blob must have empty blob id");
+            }
+
+            if (this.sizes.size !== 0) {
+                throw new Error("An inline blob must have empty sizes map");
+            }
+
+            if (this.digests.size !== 0) {
+                throw new Error("An inline blob must have empty digests map");
+            }
+        }
+        else {
+            this.validateTransforms();
+        }
+    }
+
     validate() {
+        this.validateInstance();
+
+        // validate data
+        if (! (this.data === null
+                    || (this.data instanceof ArrayBuffer && this.data.byteLength > 0))) {
+            throw new Error(
+                    `Invalid data value '${data}'. Must be null or a non-empty ArrayBuffer`);
+        }
+
+        // validate blobId
+        if (this.data === null) { // if this blob has no inline data, it must have a blobId
+            if (! (soba.type.blobId.isValid(this.blobId))) {
+                throw new Error(`Invalid blobId value '${this.blobId}'. Must match regexp '${
+                        soba.type.blobId.pattern}' when there is no inline data. ${this.data}`);
+            }
+        }
+        else {
+            if (this.blobId) {
+                throw new Error(`Invalid blobId value '${
+                        this.blobId}'. Must be empty when inline data is present`);
+            }
+        }
+
+        // validate sizes
         for (let a of Object.entries(this.sizes)) {
             a[0] = parseInt(a[0]);
             a[1] = parseInt(a[1]);
             if (! Number.isInteger(a[0])) {
-                throw new Error(`Invalid size key '${a[0]}'. Expected: A positive integer`);
+                throw new Error(`Invalid size key '${a[0]}'. Must be a positive integer`);
             }
 
             if (! Number.isInteger(a[1])) {
-                throw new Error(`Invalid size value '${a[1]}'. Expected: A positive integer`);
+                throw new Error(`Invalid size value '${a[1]}'. Must be a positive integer`);
             }
 
             if (a[0] < 0) {
-                throw new Error(`Invalid size key '${a[0]}'. Expected: A positive integer`);
+                throw new Error(`Invalid size key '${a[0]}'. Must be a positive integer`);
             }
 
             if (a[1] < 1) {
                 throw new Error(
-                        `Invalid size value '${a[1]}'. Expected: A strictly positive integer`);
+                        `Invalid size value '${a[1]}'. Must be a strictly positive integer`);
             }
 
             if (a[1] > Blob.MAX_SIZE) {
@@ -237,22 +446,23 @@ export class Blob {
             }
         }
 
+        // validate digests
         for (let [c, digests] of Object.entries(this.digests)) {
             c = parseInt(c);
 
             if (! Number.isInteger(c)) {
-                throw new Error(`Invalid compression key '${c}'. Expected: A positive integer`);
+                throw new Error(`Invalid compression key '${c}'. Must be a positive integer`);
             }
 
             for (let [d, digest] of Object.entries(digests)) {
                 d = parseInt(d);
                 if (! Number.isInteger(d)) {
-                    throw new Error(`Invalid digest key '${d}'. Expected: A positive integer`);
+                    throw new Error(`Invalid digest key '${d}'. Must be a positive integer`);
                 }
 
                 if (! (digest instanceof ArrayBuffer)) {
                     throw new Error(
-                            `Invalid digest value '${a[0]}'. Expected: A non-empty ArrayBuffer`);
+                            `Invalid digest value '${a[0]}'. Must be a non-empty ArrayBuffer`);
                 }
 
                 if (! (/*   */ (d === Blob.Sha1) //
@@ -271,12 +481,6 @@ export class Blob {
                     throw new Error(`Invalid digest size '${digest}' given digest key '${a[0]}'`);
                 }
             }
-        }
-
-        if (! (this.data === null
-                    || (this.data instanceof ArrayBuffer && this.data.byteLength > 0))) {
-            throw new Error(
-                    `Invalid data value '${data}'. Expected: null or a non-empty ArrayBuffer`);
         }
     }
 }
@@ -301,12 +505,12 @@ export class EmailAddress {
 
     validate() {
         if (! (isString(this.name))) {
-            throw new Error(`Invalid name value '${this.name}' type ${
-                    this.name.constructor.name}. Must be a String`);
+            throw new Error(`Invalid name value '${JSON.stringify(this.name)}' . Must be a String`);
         }
 
         if (! (isString(this.address) && this.address.length > 0)) {
-            throw new Error(`Invalid address value '${this.address}'. Must be a non-empty String`);
+            throw new Error(`Invalid address value '${
+                    JSON.stringify(this.address)}'. Must be a non-empty String`);
         }
     }
 }
@@ -320,18 +524,52 @@ export class MessageBody {
     static Inline = 1;
     static Attachment = 2;
 
+    #blobs;
+
     constructor({
         content = null,
         contentId = null,
         type = "application/octet-stream",
         disposition = MessageBody.Inline,
         blobs = [],
+        charset = null,
     } = {}) {
+        // charset assignment must be made before content assignment since content setter in child
+        // classes can override charset value
+        this.charset = charset;
+
         this.content = content;
         this.contentId = contentId;
         this.type = type;
         this.disposition = disposition;
         this.blobs = blobs;
+    }
+
+    get blobs() { return this.#blobs; }
+    set blobs(v) { this.#blobs = this.adaptBlobs(v); }
+
+    adaptBlobs(blobs) {
+        let retval = [];
+
+        let idx = 0;
+        for (const blob of blobs) {
+            if (blob instanceof Blob) {
+                retval.push(blob);
+            }
+            else if (blob instanceof ArrayBuffer) {
+                retval.push(new Blob({data : blob}));
+            }
+            else if (isString(blob)) {
+                throw new Error("Invalid blob value: Must be an Object or ArrayBuffer");
+            }
+            else {
+                retval.push(new Blob(blob));
+            }
+
+            ++idx;
+        }
+
+        return retval;
     }
 
     isValid() {
@@ -361,8 +599,6 @@ export class MessageBody {
             if (! (this.blobs.length > 0)) {
                 throw new Error(`Invalid blobs value: Must be a non-empty array of blobs`);
             }
-
-            // TODO: validate blobs
         }
         else if (have_content) {
             // validated in child classes
@@ -411,6 +647,7 @@ export class MessageBodyText extends MessageBody {
         disposition = MessageBody.Inline,
         blobs = [],
         language = null,
+        charset = null,
     } = {}) {
         super({
             content : content,
@@ -418,14 +655,15 @@ export class MessageBodyText extends MessageBody {
             type : "text/plain",
             disposition : disposition,
             blobs : blobs,
+            charset : charset,
         });
-        this.charset = "utf-8";
         this.language = language;
     }
 
     set content(v) {
         if (isString(v)) {
             v = soba.text.encode(v).buffer;
+            this.charset = "UTF-8";
         }
 
         super.content = v
@@ -508,10 +746,6 @@ export class MessageBodyText extends MessageBody {
             }
         }
 
-        if (! (this.charset === "utf-8")) {
-            throw new Error(`Invalid charset value '${this.charset}'. Must be 'utf-8'`);
-        }
-
         super.validate();
     }
 
@@ -525,13 +759,15 @@ export class MessageBodyHtml extends MessageBody {
         disposition = MessageBody.Inline,
         blobs = [],
         language = null,
+        charset = null,
     } = {}) {
         super({
             content : content,
             contentId : contentId,
             type : "text/html",
             disposition : disposition,
-            blobs : blobs
+            blobs : blobs,
+            charset : charset,
         });
         this.language = language;
     }
@@ -539,6 +775,7 @@ export class MessageBodyHtml extends MessageBody {
     set content(v) {
         if (isString(v)) {
             v = soba.text.encode(v).buffer;
+            this.charset = "UTF-8";
         }
 
         super.content = v;
@@ -593,7 +830,8 @@ export class MessageBodyHtml extends MessageBody {
             this.content = null;
         }
         else if (! (this.content instanceof ArrayBuffer)) {
-            // Since the ctor accepts String, the message also mentions String
+            // A HTML document is just a blob of bytes, but since our ctor accepts String, the
+            // message also mentions String
             throw new Error(
                     `Invalid text content '${this.content}'. Must be a String or an ArrayBuffer`);
         }
@@ -606,7 +844,7 @@ export class MessageBodyHtml extends MessageBody {
             let i = 0;
             for (const blob of this.blobs) {
                 if (! (blob instanceof Blob)) {
-                    throw new Error(`Invalid blob value '${blob}' at index ${
+                    throw new Error(`Invalid blob value '${JSON.stringify(blob)}' at index ${
                             i}. Must be a valid Blob instance`);
                 }
 
@@ -645,7 +883,7 @@ export class MessageBodyData extends MessageBody {
 
     validate() {
         if (! (this.content instanceof Object || this.content instanceof Array)) {
-            throw new Error(`Invalid data content '${this.content}'. Expected: An Array or Object`);
+            throw new Error(`Invalid data content '${this.content}'. Must be an Array or Object`);
         }
 
         if (! (this.type == "application/xml" || this.type == "application/json"
@@ -739,9 +977,13 @@ export class MessageAttachment {
         }
 
         for (let blob of this.blobs) {
-            if (! (blob instanceof Blob)) {
+            if (blob instanceof ArrayBuffer) {
+                blob = new Blob({data : blob})
+            }
+            else if (! (blob instanceof Blob)) {
                 blob = new Blob(blob);
             }
+
             blob.validate();
         }
     }
@@ -767,7 +1009,36 @@ export class MessageAttachment {
 
 export class Message {
     static KEY = `{${namespace}}${this.name}`;
-    static singletonAddressHeaders = [ "To", "Cc", "Bcc" ];
+
+    static singleStringHeaders = [
+        "in-reply-to",
+        "subject",
+    ];
+
+    static singleAddressHeaders = [
+        "return-path",
+        "sender",
+        "resent-sender",
+        "disposition-notification-to",
+    ];
+
+    static singleAddressArrayHeaders = [
+        "from",
+        "to",
+        "cc",
+        "bcc",
+        "reply-to",
+
+        "resent-from",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-reply-to",
+    ];
+
+    static singleStringArrayHeaders = [
+        "references",
+    ];
 
     #uuid = null;
     #headers;
@@ -780,7 +1051,7 @@ export class Message {
     #cidSet = new Set();
 
     constructor({
-        uuid = null,
+        uuid = "{00000000-0000-0000-0000-000000000000}",
         headers = [],
         attachments = [],
         bodyText = null,
@@ -865,7 +1136,8 @@ export class Message {
 
     /**
      * Validate headers of the email object.
-     * @param {*Boolean} strict: Pass true to validate outbound messages, false otherwise.
+     * @param {*Boolean} strict: Pass true to validate outbound messages, false
+     *         otherwise.
      */
     validateHeaders(strict = false) {
         const headers = this.#headers;
@@ -891,49 +1163,84 @@ export class Message {
                         JSON.stringify(header)}: Must be a non-empty String`);
             }
 
-            const values = header.at(1);
-            if (! (Array.isArray(values) && values.length > 0)) {
-                throw new Error(`Invalid header value in ${
-                        JSON.stringify(header)}: Must be a non-empty array`);
-            }
+            // still log name because we assume toLowerCase is bug-free
+            const nameLower = name.toLowerCase();
 
-            // TODO: func this out
-            for (const [i, value] of values.entries()) {
-                // validate header values that hold name/address pairs
-                if (name === "From" //
-                        || name === "To" //
-                        || name === "Cc" //
-                        || name === "Bcc" //
-                        || name === "Return-Path" //
-                        || name === "Reply-To" //
-                        || name === "Sender") {
-                    if (! (Array.isArray(value) && value.length >= 2)) {
-                        throw new Error(`Invalid address header value for key "${
-                                name}": Must be an array of size>=2`);
-                    }
+            // TODO: func these out
+            if (Message.singleAddressHeaders.indexOf(nameLower) >= 0) {
+                const value = header.at(1);
+                soba.log.debug(JSON.stringify(value));
 
-                    const addrName = value.at(0);
-                    if (! isString(addrName)) {
-                        throw new Error(`Invalid name in address header for key "${
-                                name}": Must be a String`);
-                    }
+                // validate header value that hold name/address pairs
+                if (! (value instanceof EmailAddress)) {
+                    (new EmailAddress(value)).validate();
+                }
+                else {
+                    value.validate();
+                }
 
-                    const addrValue = value.at(1);
-                    if (! (isString(addrValue) && addrValue.length > 0)) {
-                        throw new Error(`Invalid address in address header for key "${
-                                name}": Must be a non-empty String`);
-                    }
-
-                    if (strict && (! reAddress.test(addrValue))) {
-                        throw new Error(`Invalid address in address header for key "${
-                                name}": Must match the pattern ${soba.type.address.pattern}`);
+                if (strict) {
+                    // in strict mode we also validate addresses against the
+                    // address regex
+                    if (! reAddress.test(value.address)) {
+                        throw new Error(`Invalid address value ${
+                                JSON.stringify(value)} in header for key "${name}": Must match ${
+                                soba.type.address.pattern}`);
                     }
                 }
-                else { // validate header values that hold arbitrary strings
+            }
+            else if (Message.singleAddressArrayHeaders.indexOf(nameLower) >= 0) {
+                const values = header.at(1);
+                soba.log.debug(JSON.stringify(values));
+
+                if (! (Array.isArray(values) && values.length > 0)) {
+                    throw new Error(`Invalid header value in ${
+                            JSON.stringify(header)}: Must be a non-empty array`);
+                }
+
+                for (const [i, value] of values.entries()) {
+                    // validate header values that hold name/address pairs
+                    if (! (value instanceof EmailAddress)) {
+                        (new EmailAddress(value)).validate();
+                    }
+                    else {
+                        value.validate();
+                    }
+
+                    if (strict) {
+                        // in strict mode we also validate addresses against the
+                        // address regex
+                        if (! reAddress.test(value.address)) {
+                            throw new Error(`Invalid address value ${
+                                    JSON.stringify(value)} at index ${i} in header for key "${
+                                    name}": Must match ${soba.type.address.pattern}`);
+                        }
+                    }
+                }
+            }
+            else if (Message.singleStringArrayHeaders.indexOf(nameLower) >= 0) {
+                const values = header.at(1);
+                soba.log.debug(JSON.stringify(values));
+
+                if (! (Array.isArray(values) && values.length > 0)) {
+                    throw new Error(`Invalid header value in ${
+                            JSON.stringify(header)}: Must be a non-empty array`);
+                }
+
+                for (const [i, value] of values.entries()) {
                     if (! isString(value)) {
                         throw new Error(`Invalid header value ${JSON.stringify(value)} at index ${
                                 i} in string header for key "${name}": Must be a String`);
                     }
+                    // validate header values that hold name/address pairs
+                }
+            }
+            else { // validate header values that hold arbitrary strings
+                const value = header.at(1);
+                if (! isString(value)) {
+                    throw new Error(`Invalid header value ${
+                            JSON.stringify(
+                                    value)} in string header for key "${name}": Must be a String`);
                 }
             }
         }
@@ -1001,8 +1308,7 @@ export class Message {
         if (isString(v) || v instanceof ArrayBuffer) {
             v = new MessageBodyHtml({content : v, contentId : this.nextContentId()});
         }
-
-        if (! (v instanceof MessageBodyHtml)) {
+        else if (! (v instanceof MessageBodyHtml)) {
             v = new MessageBodyHtml(v);
         }
 
@@ -1039,15 +1345,12 @@ export class Message {
         }
 
         let attachmentsValid = [];
-        for (const a of attachments) {
+        for (let a of attachments) {
             if (! (a instanceof MessageAttachment)) {
                 a = new MessageAttachment(a);
-                soba.log.debug("new att");
             }
             a.validate(); // can throw
-            soba.log.debug("valid att");
             attachmentsValid.push(a);
-            soba.log.debug("push");
         }
 
         this.#attachments = attachmentsValid;
@@ -1057,14 +1360,30 @@ export class Message {
      * Header manipulators
      */
 
-    /* headerValue: Singleton headers that contain a single value. Eg. From */
+    /* headerValue: Singleton headers that typically contain a single value. Eg.
+     * Sender, Subject */
     getHeaderValue(name) {
         if (! (isString(name) && name.length > 0)) {
             throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
         }
 
+        name = name.toLowerCase();
+        if (Message.singleAddressHeaders.indexOf(name) < 0
+                && Message.singleStringHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    Message.singleStringHeaders.concat(Message.singleAddressHeaders)}`);
+        }
+
         for (const a of this.headers) {
-            if (a[0] == name) {
+            if (a.length == 0) {
+                // this is invalid yet could be a valid intermediate state so we
+                // don't throw
+                continue;
+            }
+            if (a[0].length < 2) {
+                throw new Error("Invalid header structure");
+            }
+            if (a[0].toLowerCase() == name) {
                 return a[1];
             }
         }
@@ -1072,37 +1391,25 @@ export class Message {
         return null;
     }
 
-    setHeaderAddressValue(name, ea) {
-        if (! (ea instanceof EmailAddress)) {
-            ea = new EmailAddress(ea);
-        }
-
-        ea.validate(); // can throw
-
-        let i = 0;
-
-        for (const a of this.headers) {
-            if (a[0] == name) {
-                a[1] = ea;
-                return i;
-            }
-            ++i;
-        }
-
-        this.headers.push([ name, ea ]);
-
-        return i;
-    }
-
-    /* headerValue: Singleton headers that contain an array of values. Eg. To */
+    /* headerValue: Singleton headers that contain an array of values. Eg. To,
+     * Cc */
     getHeaderSingleArray(name) {
-        if (Message.singletonAddressHeaders.indexOf(name) < 0) {
+        name = name.toLowerCase();
+        if (Message.singleAddressArrayHeaders.indexOf(name) < 0) {
             throw new Error(`Invalid header name '${name}'. Must be one of ${
-                    Message.singletonAddressHeaders}`);
+                    Message.singleAddressArrayHeaders}`);
         }
 
         for (const a of this.headers) {
-            if (a[0] == name) {
+            if (a.length == 0) {
+                // this is invalid yet could be a valid intermediate state so we
+                // don't throw
+                continue;
+            }
+            if (a[0].length < 2) {
+                throw new Error("Invalid header structure");
+            }
+            if (a[0].toLowerCase() == name) {
                 return a[1];
             }
         }
@@ -1117,25 +1424,75 @@ export class Message {
 
         let i = 0;
 
+        const nameLower = name.toLowerCase();
+        if (Message.singleStringHeaders.indexOf(nameLower) < 0) {
+            throw new Error(`Invalid header name '${nameLower}'. Must be one of ${
+                    Message.singleStringHeaders}`);
+        }
+
         for (const a of this.headers) {
-            if (a[0] == name) {
-                a[1] = value;
+            if (a.length == 0) {
+                // this is invalid yet could be a valid intermediate state so we
+                // don't throw
+                continue;
+            }
+            if (a[0].length < 2) {
+                throw new Error("Invalid header structure");
+            }
+            if (a[0].toLowerCase() == nameLower) {
+                a[1] = [ value ];
                 return i;
             }
 
             ++i;
         }
 
-        // assert(i == this.headers.length)
         this.headers.push([ name, value ]);
 
         return i;
     }
 
+    setHeaderSingleAddress(name, ea) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid name value '${name}'. Must be a non-empty String`);
+        }
+
+        if (! (ea instanceof EmailAddress)) {
+            ea = new EmailAddress(ea);
+        }
+
+        ea.validate(); // can throw
+
+        let i = 0;
+
+        const nameLower = name.toLowerCase();
+        for (const a of this.headers) {
+            if (a.length == 0) {
+                // this is invalid yet could be a valid intermediate state so we
+                // don't throw
+                continue;
+            }
+            if (a[0].length < 2) {
+                throw new Error("Invalid header structure");
+            }
+            if (a[0].toLowerCase() == nameLower) {
+                a[1] = ea;
+                return i;
+            }
+
+            ++i;
+        }
+
+        this.headers.push([ name, ea ]);
+
+        return i;
+    }
+
     setHeaderSingleAddressArray(name, emailAddresses) {
-        if (Message.singletonAddressHeaders.indexOf(name) < 0) {
-            throw new Error(`Invalid header name '${name}'. Must be one of ${
-                    Message.singletonAddressHeaders}`);
+        const nameLower = name.toLowerCase();
+        if (Message.singleAddressArrayHeaders.indexOf(nameLower) < 0) {
+            throw new Error(`Invalid header name '${nameLower}'. Must be one of ${
+                    Message.singleAddressArrayHeaders}`);
         }
 
         if (! (emailAddresses instanceof Array)) {
@@ -1170,7 +1527,15 @@ export class Message {
         let i = 0;
 
         for (const a of this.headers) {
-            if (a[0] == name) {
+            if (a.length == 0) {
+                // this is invalid yet could be a valid intermediate state so we
+                // don't throw
+                continue;
+            }
+            if (a[0].length < 2) {
+                throw new Error("Invalid header structure");
+            }
+            if (a[0].toLowerCase() == nameLower) {
                 a[1] = emailAddressesValid;
                 return i;
             }
@@ -1184,9 +1549,10 @@ export class Message {
     }
 
     addToSingleAddressArray(name, emailAddresses) {
-        if (Message.singletonAddressHeaders.indexOf(name) < 0) {
-            throw new Error(`Invalid header name '${name}'. Must be one of ${
-                    Message.singletonAddressHeaders}`);
+        const nameLower = name.toLowerCase();
+        if (Message.singleAddressArrayHeaders.indexOf(nameLower) < 0) {
+            throw new Error(`Invalid header name '${nameLower}'. Must be one of ${
+                    Message.singleAddressArrayHeaders}`);
         }
 
         if (! (emailAddresses instanceof Array)) {
@@ -1200,8 +1566,17 @@ export class Message {
         let i = 0;
 
         for (const a of this.headers) {
-            if (a[0] == name) {
+            if (a.length == 0) {
+                // this is invalid yet could be a valid intermediate state so we
+                // don't throw
+                continue;
+            }
+            if (a[0].length < 2) {
+                throw new Error("Invalid header structure");
+            }
+            if (a[0].toLowerCase() == nameLower) {
                 emailAddressArray = a[1];
+                soba.log.info(`${a[0]} Before ${JSON.stringify(emailAddressArray)}`);
 
                 let j = 0;
 
@@ -1216,7 +1591,7 @@ export class Message {
         }
 
         if (i == this.headers.length) {
-            this.headers.push([ name, [ ea ] ]);
+            this.headers.push([ name, emailAddresses ]);
             return i;
         }
 
@@ -1230,21 +1605,34 @@ export class Message {
             let index = emailAddressMap.get(ea.address);
             if (index || index === 0) {
                 emailAddressArray[index].name = ea.name;
-                // assert(emailAddressArray[index].address === ea.address);
             }
             else {
                 emailAddressArray.push(ea);
             }
         }
 
+        soba.log.info(`${name} After  ${JSON.stringify(emailAddressArray)}`);
+
         return i;
     }
 
-    /* From: EmailAddress */
+    /* Sender: EmailAddress */
+    get hasSender() { return this.getHeaderValue("Sender") !== null; }
+    get sender() {
+        const a = this.getHeaderValue("Sender");
+        if (! a) {
+            return null;
+        }
+        return a;
+    }
+
+    set sender(emailAddress) { this.setHeaderSingleAddress("Sender", emailAddress); }
+
+    /* From: EmailAddress[] */
     get hasFrom() { return this.getHeaderValue("From") !== null; }
 
     get from() {
-        const a = this.getHeaderValue("From");
+        const a = this.getHeaderSingleArray("From");
         if (! a) {
             return new EmailAddress();
         }
@@ -1252,22 +1640,34 @@ export class Message {
     }
 
     get fromName() {
-        const a = this.getHeaderValue("From");
+        const a = this.getHeaderSingleArray("From");
         if (! a) {
             return null;
         }
-        return a.name;
+        if (a.length == 0) {
+            return null;
+        }
+        if (a[0].length == 0) {
+            return null;
+        }
+        return a[0].name;
     }
 
     get fromAddress() {
-        const a = this.getHeaderValue("From");
+        const a = this.getHeaderSingleArray("From");
         if (! a) {
             return null;
         }
-        return a.address;
+        if (a.length == 0) {
+            return null;
+        }
+        if (a[0].length == 0) {
+            throw new Error("Invalid header structure for key 'From'");
+        }
+        return a[0].address;
     }
 
-    set from(emailAddress) { this.setHeaderAddressValue("From", emailAddress); }
+    set from(emailAddress) { this.setHeaderSingleAddressArray("From", emailAddress); }
 
     /* To: EmailAddress[] */
     get hasTo() { return this.getHeaderValue("To") !== null; }
