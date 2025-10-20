@@ -8,6 +8,7 @@ TODO: 1. Use a JS parser
 """
 
 import io
+import os
 import re
 import sys
 import base64
@@ -50,6 +51,10 @@ MODULES = [
         genpath("..", "mbmgr", "MailboxManager.mjs"),
         "https://mailboxmanager.core.app.sobamail.com",
     ),
+    (
+        genpath("..", "responder", "Mutator.mjs"),
+        "https://responder.test.user.app.sobamail.com",
+    ),
 ]
 
 # format
@@ -86,6 +91,10 @@ for i, (fn, ns) in enumerate(MODULES):
     print("\tNS ", ns)
 
     for fnm, _ in MODULES[i + 1 :]:
+        if not os.path.exists(fnm):
+            print("\tMISSING FILE", fnm)
+            continue
+
         fdata = io.open(fnm, "r", encoding="utf8").read()
 
         pattern = f"{ns}\\?sha224=[A-Za-z0-9_-]+"
