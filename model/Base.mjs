@@ -728,21 +728,17 @@ export class MessageBodyText extends MessageBody {
         if (! Array.isArray(this.blobs)) {
             throw new Error(`Invalid blobs value '${this.blobs}'. Must be an Array of Blobs`);
         }
-        else {
-            let i = 0;
-            for (const blob of this.blobs) {
-                if (blob instanceof Blob) {
-                    blob.validate();
-                }
-                else if (blob instanceof ArrayBuffer) {
-                    // fallthrough
-                }
-                else {
-                    throw new Error(`Invalid blob value '${blob}' at index ${
-                            i}. Must be a valid Blob instance`);
-                }
 
-                ++i;
+        for (const [i, blob] of this.blobs.entries()) {
+            if (blob instanceof Blob) {
+                blob.validate();
+            }
+            else if (blob instanceof ArrayBuffer) {
+                // fallthrough
+            }
+            else {
+                throw new Error(`Invalid blob value '${blob}' at index ${
+                        i}. Must be a valid Blob instance`);
             }
         }
 
@@ -840,18 +836,14 @@ export class MessageBodyHtml extends MessageBody {
         if (! Array.isArray(this.blobs)) {
             throw new Error(`Invalid blobs value '${this.blobs}'. Must be an Array of Blobs`);
         }
-        else {
-            let i = 0;
-            for (const blob of this.blobs) {
-                if (! (blob instanceof Blob)) {
-                    throw new Error(`Invalid blob value '${JSON.stringify(blob)}' at index ${
-                            i}. Must be a valid Blob instance`);
-                }
 
-                blob.validate();
-
-                ++i;
+        for (const [i, blob] of this.blobs.entries()) {
+            if (! (blob instanceof Blob)) {
+                throw new Error(`Invalid blob value '${JSON.stringify(blob)}' at index ${
+                        i}. Must be a valid Blob instance`);
             }
+
+            blob.validate();
         }
 
         if (! (this.language === null || (isString(this.language) && this.language.length > 0))) {
@@ -1397,15 +1389,11 @@ export class Message {
                     Message.singleStringHeaders.concat(Message.singleAddressHeaders)}`);
         }
 
-        for (const a of this.headers) {
-            if (a.length == 0) {
-                // this is invalid yet could be a valid intermediate state so we
-                // don't throw
-                continue;
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
-            if (a[0].length < 2) {
-                throw new Error("Invalid header structure");
-            }
+
             if (a[0].toLowerCase() == name) {
                 return a[1];
             }
@@ -1423,15 +1411,11 @@ export class Message {
                     Message.singleAddressArrayHeaders}`);
         }
 
-        for (const a of this.headers) {
-            if (a.length == 0) {
-                // this is invalid yet could be a valid intermediate state so we
-                // don't throw
-                continue;
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
-            if (a[0].length < 2) {
-                throw new Error("Invalid header structure");
-            }
+
             if (a[0].toLowerCase() == name) {
                 return a[1];
             }
@@ -1445,34 +1429,26 @@ export class Message {
             throw new Error(`Invalid name value '${name}'. Must be a non-empty String`);
         }
 
-        let i = 0;
-
         const nameLower = name.toLowerCase();
         if (Message.singleStringHeaders.indexOf(nameLower) < 0) {
             throw new Error(`Invalid header name '${nameLower}'. Must be one of ${
                     Message.singleStringHeaders}`);
         }
 
-        for (const a of this.headers) {
-            if (a.length == 0) {
-                // this is invalid yet could be a valid intermediate state so we
-                // don't throw
-                continue;
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
-            if (a[0].length < 2) {
-                throw new Error("Invalid header structure");
-            }
+
             if (a[0].toLowerCase() == nameLower) {
                 a[1] = [ value ];
                 return i;
             }
-
-            ++i;
         }
 
         this.headers.push([ name, value ]);
 
-        return i;
+        return this.headers.length - 1;
     }
 
     setHeaderSingleAddress(name, ea) {
@@ -1486,29 +1462,21 @@ export class Message {
 
         ea.validate(); // can throw
 
-        let i = 0;
-
         const nameLower = name.toLowerCase();
-        for (const a of this.headers) {
-            if (a.length == 0) {
-                // this is invalid yet could be a valid intermediate state so we
-                // don't throw
-                continue;
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
-            if (a[0].length < 2) {
-                throw new Error("Invalid header structure");
-            }
+
             if (a[0].toLowerCase() == nameLower) {
-                a[1] = ea;
+                a[1] = [ ea ];
                 return i;
             }
-
-            ++i;
         }
 
-        this.headers.push([ name, ea ]);
+        this.headers.push([ name, [ ea ] ]);
 
-        return i;
+        return this.headers.length - 1;
     }
 
     setHeaderSingleAddressArray(name, emailAddresses) {
@@ -1523,10 +1491,7 @@ export class Message {
                     emailAddresses}'. Must be an Array of EmailAddress instances`);
         }
 
-        let emailAddressMap = new Map();
         let emailAddressesValid = [];
-
-        let j = 0;
 
         for (let ea of emailAddresses) {
             if (! (ea instanceof EmailAddress)) {
@@ -1535,40 +1500,23 @@ export class Message {
 
             ea.validate(); // can throw
 
-            let index = emailAddressMap.get(ea.address)
-            if (index || index === 0) {
-                emailAddressesValid[index].name = ea.name;
-            }
-            else {
-                emailAddressesValid.push(ea);
-                emailAddressMap.set(ea.address, j);
-            }
-
-            ++j;
+            emailAddressesValid.push(ea);
         }
 
-        let i = 0;
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
 
-        for (const a of this.headers) {
-            if (a.length == 0) {
-                // this is invalid yet could be a valid intermediate state so we
-                // don't throw
-                continue;
-            }
-            if (a[0].length < 2) {
-                throw new Error("Invalid header structure");
-            }
             if (a[0].toLowerCase() == nameLower) {
                 a[1] = emailAddressesValid;
                 return i;
             }
-
-            ++i;
         }
 
         this.headers.push([ name, emailAddressesValid ]);
 
-        return i;
+        return this.headers.length - 1;
     }
 
     addToSingleAddressArray(name, emailAddresses) {
@@ -1583,41 +1531,35 @@ export class Message {
                     emailAddresses}'. Must be an Array of EmailAddress instances`);
         }
 
+        let idx = 0;
         let emailAddressArray = null;
-        let emailAddressMap = new Map();
 
-        let i = 0;
+        // search for existing header entry
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
 
-        for (const a of this.headers) {
-            if (a.length == 0) {
-                // this is invalid yet could be a valid intermediate state so we
-                // don't throw
-                continue;
-            }
-            if (a[0].length < 2) {
-                throw new Error("Invalid header structure");
-            }
             if (a[0].toLowerCase() == nameLower) {
                 emailAddressArray = a[1];
-                soba.log.info(`${a[0]} Before ${JSON.stringify(emailAddressArray)}`);
-
-                let j = 0;
-
-                for (const ea of emailAddressArray) {
-                    emailAddressMap.set(ea.address, j++);
-                }
-
+                idx = i;
                 break;
             }
-
-            ++i;
         }
 
-        if (i == this.headers.length) {
-            this.headers.push([ name, emailAddresses ]);
-            return i;
+        let emailAddressMap = new Map();
+        if (! emailAddressArray) {
+            // header entry not found, create EmailAddress[]
+            emailAddressArray = [];
+        }
+        else {
+            // header entry found, add existing addresses to Map for deduplication
+            for (const ea of emailAddressArray) {
+                emailAddressMap.set(ea.address, true);
+            }
         }
 
+        // validate and append to EmailAddress[]
         for (let ea of emailAddresses) {
             if (! (ea instanceof EmailAddress)) {
                 ea = new EmailAddress(ea);
@@ -1625,18 +1567,20 @@ export class Message {
 
             ea.validate(); // can throw
 
-            let index = emailAddressMap.get(ea.address);
-            if (index || index === 0) {
-                emailAddressArray[index].name = ea.name;
+            if (emailAddressMap.has(ea.address)) {
+                continue;
             }
-            else {
-                emailAddressArray.push(ea);
-            }
+
+            emailAddressArray.push(ea);
         }
 
-        soba.log.info(`${name} After  ${JSON.stringify(emailAddressArray)}`);
+        // if this is a new header entry, append it to the header entry array
+        if (idx === 0) {
+            idx = this.headers.length;
+            this.headers.push(name, emailAddressArray);
+        }
 
-        return i;
+        return idx;
     }
 
     /* Sender: EmailAddress */
