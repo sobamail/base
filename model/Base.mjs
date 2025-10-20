@@ -1013,6 +1013,7 @@ export class Message {
     static singleStringHeaders = [
         "in-reply-to",
         "subject",
+        "date",
     ];
 
     static singleAddressHeaders = [
@@ -1627,6 +1628,23 @@ export class Message {
     }
 
     set sender(emailAddress) { this.setHeaderSingleAddress("Sender", emailAddress); }
+
+    /* dateMsec: BigInt */
+    get dateMsec() {
+        const dateString = this.getHeaderValue("Date");
+        if (! dateString) {
+            return null;
+        }
+
+        const dateMsec = Date.parse(dateString);
+        if (! dateMsec) {
+            return null;
+        }
+
+        return BigInt(dateMsec);
+    }
+
+    set dateMsec(v) { setHeaderSingleString("Date", v); }
 
     /* From: EmailAddress[] */
     get hasFrom() { return this.getHeaderValue("From") !== null; }
