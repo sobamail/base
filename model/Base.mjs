@@ -1363,6 +1363,28 @@ export class Message {
 
     /* headerValue: Singleton headers that typically contain a single value. Eg.
      * Sender, Subject */
+    hasHeader(name) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        name = name.toLowerCase();
+
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
+
+            if (a[0].toLowerCase() == name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /* headerValue: Singleton headers that typically contain a single value. Eg.
+     * Sender, Subject */
     getHeaderValue(name) {
         if (! (isString(name) && name.length > 0)) {
             throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
@@ -1618,7 +1640,7 @@ export class Message {
     }
 
     /* Sender: EmailAddress */
-    get hasSender() { return this.getHeaderValue("Sender") !== null; }
+    get hasSender() { return this.getHeader("Sender"); }
     get sender() {
         const a = this.getHeaderValue("Sender");
         if (! a) {
@@ -1647,7 +1669,7 @@ export class Message {
     set dateMsec(v) { setHeaderSingleString("Date", v); }
 
     /* From: EmailAddress[] */
-    get hasFrom() { return this.getHeaderValue("From") !== null; }
+    get hasFrom() { return this.hasHeader("From"); }
 
     get from() {
         const a = this.getHeaderSingleArray("From");
@@ -1688,7 +1710,7 @@ export class Message {
     set from(emailAddress) { this.setHeaderSingleAddressArray("From", emailAddress); }
 
     /* To: EmailAddress[] */
-    get hasTo() { return this.getHeaderValue("To") !== null; }
+    get hasTo() { return this.hasHeader("To"); }
 
     get to() {
         const a = this.getHeaderSingleArray("To");
@@ -1702,7 +1724,7 @@ export class Message {
     addTo(emailAddresses) { this.addToSingleAddressArray("To", emailAddresses); }
 
     /* Cc: EmailAddress[] */
-    get hasCc() { return this.getHeaderValue("Cc") !== null; }
+    get hasCc() { return this.hasHeader("Cc"); }
 
     get cc() {
         const a = this.getHeaderSingleArray("Cc");
@@ -1716,7 +1738,7 @@ export class Message {
     addCc(emailAddresses) { this.addToSingleAddressArray("Cc", emailAddresses); }
 
     /* Bcc: EmailAddress[] */
-    get hasBcc() { return this.getHeaderValue("Bcc") !== null; }
+    get hasBcc() { return this.hasHeader("Bcc"); }
 
     get bcc() {
         const a = this.getHeaderSingleArray("Bcc");
@@ -1730,7 +1752,7 @@ export class Message {
     addBcc(emailAddresses) { this.addToSingleAddressArray("Bcc", emailAddresses); }
 
     /* Subject: String */
-    get hasSubject() { return this.getHeaderValue("Subject") !== null; }
+    get hasSubject() { return this.hasHeader("Subject"); }
 
     get subject() {
         const a = this.getHeaderValue("Subject");
@@ -1743,7 +1765,7 @@ export class Message {
     set subject(subject) { this.setHeaderSingleString("Subject", subject); }
 
     /* Message-Id: String */
-    get hasMessageId() { return this.getHeaderValue("Message-Id") !== null; }
+    get hasMessageId() { return this.hasHeader("Message-Id"); }
 
     get messageId() {
         const a = this.getHeaderValue("Message-Id");

@@ -4,7 +4,7 @@ import "soba://computer/R1"
 import {
     DeleteRow,
     NotFoundError,
-} from "https://sobamail.com/module/base/v1?sha224=psVyMJg-oYkQ2cFckmNB6QBicRKhvFFOXDFbYw";
+} from "https://sobamail.com/module/base/v1?sha224=VRStmn4oT8V34dDN9HgTFlVx-9orz8MTlB7zmg";
 import {
     AddDomain,
     AddUser,
