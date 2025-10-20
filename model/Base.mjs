@@ -1003,7 +1003,6 @@ export class Message {
     static KEY = `{${namespace}}${this.name}`;
 
     static singleStringHeaders = [
-        "in-reply-to",
         "subject",
         "date",
     ];
@@ -1030,6 +1029,7 @@ export class Message {
     ];
 
     static singleStringArrayHeaders = [
+        "in-reply-to",
         "references",
     ];
 
