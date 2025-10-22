@@ -1003,8 +1003,14 @@ export class Message {
     static KEY = `{${namespace}}${this.name}`;
 
     static singleStringHeaders = [
+        "message-id",
         "subject",
         "date",
+    ];
+
+    static singleStringArrayHeaders = [
+        "in-reply-to",
+        "references",
     ];
 
     static singleAddressHeaders = [
@@ -1026,11 +1032,6 @@ export class Message {
         "resent-cc",
         "resent-bcc",
         "resent-reply-to",
-    ];
-
-    static singleStringArrayHeaders = [
-        "in-reply-to",
-        "references",
     ];
 
     #uuid = null;
@@ -1162,7 +1163,6 @@ export class Message {
             // TODO: func these out
             if (Message.singleAddressHeaders.indexOf(nameLower) >= 0) {
                 const value = header.at(1);
-                soba.log.debug(JSON.stringify(value));
 
                 // validate header value that hold name/address pairs
                 if (! (value instanceof EmailAddress)) {
@@ -1184,7 +1184,6 @@ export class Message {
             }
             else if (Message.singleAddressArrayHeaders.indexOf(nameLower) >= 0) {
                 const values = header.at(1);
-                soba.log.debug(JSON.stringify(values));
 
                 if (! (Array.isArray(values) && values.length > 0)) {
                     throw new Error(`Invalid header value in ${
@@ -1213,7 +1212,6 @@ export class Message {
             }
             else if (Message.singleStringArrayHeaders.indexOf(nameLower) >= 0) {
                 const values = header.at(1);
-                soba.log.debug(JSON.stringify(values));
 
                 if (! (Array.isArray(values) && values.length > 0)) {
                     throw new Error(`Invalid header value in ${
@@ -1353,8 +1351,6 @@ export class Message {
      * Header manipulators
      */
 
-    /* headerValue: Singleton headers that typically contain a single value. Eg.
-     * Sender, Subject */
     hasHeader(name) {
         if (! (isString(name) && name.length > 0)) {
             throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
@@ -1375,64 +1371,94 @@ export class Message {
         return false;
     }
 
-    /* headerValue: Singleton headers that typically contain a single value. Eg.
-     * Sender, Subject */
-    getHeaderValue(name) {
+    /*
+     * String Value Array */
+
+    // For RFC 5322/3.6.8. Optional Fields
+    // Returns an array of strings in the order of occurrence
+
+    getHeaderStringValueArray(name) {
         if (! (isString(name) && name.length > 0)) {
             throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
         }
 
         name = name.toLowerCase();
-        if (Message.singleAddressHeaders.indexOf(name) < 0
-                && Message.singleStringHeaders.indexOf(name) < 0) {
-            throw new Error(`Invalid header name '${name}'. Must be one of ${
-                    Message.singleStringHeaders.concat(Message.singleAddressHeaders)}`);
+
+        if (Message.singleStringHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleStringHeaders)}`);
         }
+
+        if (Message.singleStringArrayHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleStringArrayHeaders)}`);
+        }
+
+        if (Message.singleAddressHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleAddressHeaders)}`);
+        }
+
+        if (Message.singleAddressArrayHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleAddressArrayHeaders)}`);
+        }
+
+        let retval = [];
 
         for (const [i, a] of this.headers.entries()) {
             if (a.length < 2) {
                 throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
 
-            if (a[0].toLowerCase() == name) {
-                return a[1];
-            }
-        }
-
-        return null;
-    }
-
-    /* headerValue: Singleton headers that contain an array of values. Eg. To,
-     * Cc */
-    getHeaderSingleArray(name) {
-        name = name.toLowerCase();
-        if (Message.singleAddressArrayHeaders.indexOf(name) < 0) {
-            throw new Error(`Invalid header name '${name}'. Must be one of ${
-                    Message.singleAddressArrayHeaders}`);
-        }
-
-        for (const [i, a] of this.headers.entries()) {
-            if (a.length < 2) {
-                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
             }
 
             if (a[0].toLowerCase() == name) {
-                return a[1];
+                if (! (isString(a[1]) && a[1].length > 0)) {
+                    soba.log.warning(
+                            `Invalid value for header entry ${i}: Must be a non-empty String`);
+                    continue;
+                }
+
+                retval.push(a[1]);
             }
         }
 
-        return null;
+        return retval;
     }
 
-    setHeaderSingleString(name, value) {
+    setHeaderStringValue(name, value) {
         if (! (isString(name) && name.length > 0)) {
-            throw new Error(`Invalid name value '${name}'. Must be a non-empty String`);
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
         }
 
-        const nameLower = name.toLowerCase();
-        if (Message.singleStringHeaders.indexOf(nameLower) < 0) {
-            throw new Error(`Invalid header name '${nameLower}'. Must be one of ${
-                    Message.singleStringHeaders}`);
+        if (! (isString(value) && value.length > 0)) {
+            throw new Error(`Invalid header value '${value}'. Must be a non-empty String`);
+        }
+
+        name = name.toLowerCase();
+
+        if (Message.singleStringHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleStringHeaders)}`);
+        }
+
+        if (Message.singleStringArrayHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleStringArrayHeaders)}`);
+        }
+
+        if (Message.singleAddressHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleAddressHeaders)}`);
+        }
+
+        if (Message.singleAddressArrayHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleAddressArrayHeaders)}`);
         }
 
         for (const [i, a] of this.headers.entries()) {
@@ -1440,20 +1466,321 @@ export class Message {
                 throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
 
-            if (a[0].toLowerCase() == nameLower) {
-                a[1] = [ value ];
+            if (a[0].toLowerCase() == name) {
+                a[1] = value;
                 return i;
             }
         }
 
-        this.headers.push([ name, value ]);
+        let idx = this.#headers.length;
+        this.#headers.push([ name, value ]);
 
-        return this.headers.length - 1;
+        return idx;
     }
 
-    setHeaderSingleAddress(name, ea) {
+    // Adder(?) for RFC 5322/3.6.8. Optional Fields
+    addHeaderStringValue(name, value) {
         if (! (isString(name) && name.length > 0)) {
-            throw new Error(`Invalid name value '${name}'. Must be a non-empty String`);
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        if (! (isString(value) && value.length > 0)) {
+            throw new Error(`Invalid header value '${value}'. Must be a non-empty String`);
+        }
+
+        name = name.toLowerCase();
+
+        if (Message.singleStringHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleStringHeaders)}`);
+        }
+
+        if (Message.singleStringArrayHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleStringArrayHeaders)}`);
+        }
+
+        if (Message.singleAddressHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleAddressHeaders)}`);
+        }
+
+        if (Message.singleAddressArrayHeaders.indexOf(name) >= 0) {
+            throw new Error(`Invalid header name '${name}'. Can't be one of ${
+                    JSON.stringify(Message.singleAddressArrayHeaders)}`);
+        }
+
+        let idx = this.#headers.length;
+        this.#headers.push([ name, value ]);
+
+        return idx;
+    }
+
+    /* String Value Array
+     */
+
+    /*
+     * Single String Value */
+
+    getHeaderSingleStringValue(name) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        name = name.toLowerCase();
+
+        if (Message.singleStringHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleStringHeaders)}`);
+        }
+
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
+
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            if (a[0].toLowerCase() == name) {
+                if (! (isString(a[1]) && a[1].length > 0)) {
+                    soba.log.warning(
+                            `Invalid value for header entry ${i}: Must be a non-empty String`);
+                    continue;
+                }
+
+                return a[1];
+            }
+        }
+
+        return null;
+    }
+
+    setHeaderSingleStringValue(name, value) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        if (! (isString(value) && value.length > 0)) {
+            throw new Error(`Invalid header value '${value}'. Must be a non-empty String`);
+        }
+
+        name = name.toLowerCase();
+
+        if (Message.singleStringHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleStringHeaders)}`);
+        }
+
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
+
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            if (a[0].toLowerCase() == name) {
+                // no need to validate a[1] since it's going to be overwritten
+
+                a[1] = value;
+                return i;
+            }
+        }
+
+        let idx = this.#headers.length;
+        this.#headers.push([ name, value ]);
+
+        return idx;
+    }
+
+    /* Single String Value
+     */
+
+    /*
+     * Single String Array Value */
+
+    // For fields that occur once but have multiple values:
+    // ie. In-Reply-To, References
+
+    getHeaderSingleStringArrayValue(name) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        name = name.toLowerCase();
+
+        if (Message.singleStringArrayHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleStringArrayHeaders)}`);
+        }
+
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
+
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            if (a[0].toLowerCase() == name) {
+                if (! (isString(a[1]) && a[1].length > 0)) {
+                    soba.log.warning(
+                            `Invalid value for header entry ${i}: Must be a non-empty String`);
+                    continue;
+                }
+
+                return a[1];
+            }
+        }
+
+        return null;
+    }
+
+    setHeaderSingleStringArrayValue(name, values) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        if (! (Array.isArray(values) && values.length > 0)) {
+            throw new Error(`Invalid header value '${values}'. Must be a non-empty Array`);
+        }
+
+        for (const [i, value] of values.entries()) {
+            if (! (isString(value) && value.length > 0)) {
+                throw new Error(`Invalid header value at index ${i}. Must be a non-empty String`);
+            }
+        }
+
+        name = name.toLowerCase();
+
+        if (Message.singleStringArrayHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleStringArrayHeaders)}`);
+        }
+
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
+
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            // no need to validate a[1] since it's going to be overwritten
+
+            if (a[0].toLowerCase() == name) {
+                a[1] = values;
+                return i;
+            }
+        }
+
+        let idx = this.#headers.length;
+        this.#headers.push([ name, values ]);
+
+        return idx;
+    }
+
+    addHeaderSingleStringArrayValue(name, value) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        if (! (isString(value) && value.length > 0)) {
+            throw new Error(`Invalid header value '${value}'. Must be a non-empty String`);
+        }
+
+        name = name.toLowerCase();
+
+        if (Message.singleStringArrayHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleStringArrayHeaders)}`);
+        }
+
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
+
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            if (a[0].toLowerCase() == name) {
+                if (! (Array.isArray(a[1]) && a[1].length > 0)) {
+                    soba.log.warning(
+                            `Invalid value for header entry ${i}: Must be a non-empty Array`);
+                    continue;
+                }
+
+                a[1].push(value)
+                return i;
+            }
+        }
+
+        let idx = this.#headers.length;
+        this.#headers.push([ name, [ value ] ]);
+
+        return idx;
+    }
+
+    /* Single String Array Value
+     */
+
+    /*
+     * Single Address Value */
+
+    // For address fields that occur once and "must" contain a single value
+    // ie. Return-Path, Sender, Resent-Sender, Disposition-Notification-To
+
+    getHeaderAddressValue(name) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        name = name.toLowerCase();
+
+        if (Message.singleAddressHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleAddressHeaders)}`);
+        }
+
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
+
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            if (a[0].toLowerCase() == name) {
+                if (! (a[1] instanceof EmailAddress && a[1].isValid())) {
+                    soba.log.warning(`Invalid EmailAddress value for header entry ${
+                            i}: Must be a valid EmailAddress instance`);
+                    continue;
+                }
+
+                return a[1];
+            }
+        }
+
+        return null;
+    }
+
+    setHeaderAddressValue(name, value) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
         }
 
         if (! (ea instanceof EmailAddress)) {
@@ -1462,37 +1789,89 @@ export class Message {
 
         ea.validate(); // can throw
 
-        const nameLower = name.toLowerCase();
+        name = name.toLowerCase();
+
+        if (Message.singleAddressHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleAddressHeaders)}`);
+        }
+
         for (const [i, a] of this.headers.entries()) {
             if (a.length < 2) {
                 throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
 
-            if (a[0].toLowerCase() == nameLower) {
-                a[1] = [ ea ];
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            if (a[0].toLowerCase() == name) {
+                // no need to validate a[1] since it's going to be overwritten
+
+                a[1] = value;
                 return i;
             }
         }
 
-        this.headers.push([ name, [ ea ] ]);
+        let idx = this.#headers.length;
+        this.#headers.push([ name, value ]);
 
-        return this.headers.length - 1;
+        return idx;
     }
 
-    setHeaderSingleAddressArray(name, emailAddresses) {
-        const nameLower = name.toLowerCase();
-        if (Message.singleAddressArrayHeaders.indexOf(nameLower) < 0) {
-            throw new Error(`Invalid header name '${nameLower}'. Must be one of ${
-                    Message.singleAddressArrayHeaders}`);
+    /* Single Address
+     */
+
+    /*
+     * Single Address Array  */
+
+    getHeaderSingleAddressArrayValue(name) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
         }
 
-        if (! (emailAddresses instanceof Array)) {
-            throw new Error(`Invalid emailAddresses value '${
-                    emailAddresses}'. Must be an Array of EmailAddress instances`);
+        name = name.toLowerCase();
+
+        if (Message.singleAddressArrayHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleAddressArrayHeaders)}`);
+        }
+
+        for (const [i, a] of this.headers.entries()) {
+            if (a.length < 2) {
+                throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
+            }
+
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            if (a[0].toLowerCase() == name) {
+                if (! (Array.isArray(a[1]) && a[1].length > 0)) {
+                    soba.log.warning(
+                            `Invalid value for header entry ${i}: Must be a non-empty Array`);
+                    continue;
+                }
+
+                return a[1];
+            }
+        }
+
+        return null;
+    }
+
+    setHeaderSingleAddressArrayValue(name, emailAddresses) {
+        if (! (isString(name) && name.length > 0)) {
+            throw new Error(`Invalid header name '${name}'. Must be a non-empty String`);
+        }
+
+        if (! (Array.isArray(emailAddresses) && emailAddresses.length > 0)) {
+            throw new Error(`Invalid header value '${emailAddresses}'. Must be a non-empty Array`);
         }
 
         let emailAddressesValid = [];
-
         for (let ea of emailAddresses) {
             if (! (ea instanceof EmailAddress)) {
                 ea = new EmailAddress(ea);
@@ -1503,75 +1882,68 @@ export class Message {
             emailAddressesValid.push(ea);
         }
 
+        name = name.toLowerCase();
+
+        if (Message.singleAddressArrayHeaders.indexOf(name) < 0) {
+            throw new Error(`Invalid header name '${name}'. Must be one of ${
+                    JSON.stringify(Message.singleAddressArrayHeaders)}`);
+        }
+
         for (const [i, a] of this.headers.entries()) {
             if (a.length < 2) {
                 throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
 
-            if (a[0].toLowerCase() == nameLower) {
+            if (! (isString(a[0]) && a[0].length > 0)) {
+                soba.log.warning(`Invalid name for header entry ${i}: Must be a non-empty String`);
+                continue;
+            }
+
+            // no need to validate a[1] since it's going to be overwritten
+
+            if (a[0].toLowerCase() == name) {
                 a[1] = emailAddressesValid;
                 return i;
             }
         }
 
-        this.headers.push([ name, emailAddressesValid ]);
+        let idx = this.#headers.length;
+        this.#headers.push([ name, emailAddressesValid ]);
 
-        return this.headers.length - 1;
+        return idx;
     }
 
-    addToSingleAddressArray(name, emailAddresses) {
+    addToSingleAddressArray(name, ea) {
         const nameLower = name.toLowerCase();
         if (Message.singleAddressArrayHeaders.indexOf(nameLower) < 0) {
             throw new Error(`Invalid header name '${nameLower}'. Must be one of ${
                     Message.singleAddressArrayHeaders}`);
         }
 
-        if (! (emailAddresses instanceof Array)) {
-            throw new Error(`Invalid emailAddresses value '${
-                    emailAddresses}'. Must be an Array of EmailAddress instances`);
+        if (! (ea instanceof EmailAddress)) {
+            ea = new EmailAddress(ea);
         }
 
-        let idx = 0;
-        let emailAddressArray = null;
+        ea.validate(); // can throw
 
         // search for existing header entry
+        let idx = 0;
+        let emailAddressArray = [];
         for (const [i, a] of this.headers.entries()) {
             if (a.length < 2) {
                 throw new Error(`Header entry ${i} length ${a[0].length} is out of range`);
             }
 
             if (a[0].toLowerCase() == nameLower) {
-                emailAddressArray = a[1];
+                for (const ea of emailAddressArray) {
+                    if (ea.address = ea.address) {
+                        return idx;
+                    }
+                }
+                a[1].push(ea);
                 idx = i;
-                break;
+                return;
             }
-        }
-
-        let emailAddressMap = new Map();
-        if (! emailAddressArray) {
-            // header entry not found, create EmailAddress[]
-            emailAddressArray = [];
-        }
-        else {
-            // header entry found, add existing addresses to Map for deduplication
-            for (const ea of emailAddressArray) {
-                emailAddressMap.set(ea.address, true);
-            }
-        }
-
-        // validate and append to EmailAddress[]
-        for (let ea of emailAddresses) {
-            if (! (ea instanceof EmailAddress)) {
-                ea = new EmailAddress(ea);
-            }
-
-            ea.validate(); // can throw
-
-            if (emailAddressMap.has(ea.address)) {
-                continue;
-            }
-
-            emailAddressArray.push(ea);
         }
 
         // if this is a new header entry, append it to the header entry array
@@ -1583,21 +1955,26 @@ export class Message {
         return idx;
     }
 
+    /*
+     * Convenience accessors for common headers
+     */
+
     /* Sender: EmailAddress */
-    get hasSender() { return this.getHeader("Sender"); }
+    get hasSender() { return this.hasHeader("Sender"); }
+
     get sender() {
-        const a = this.getHeaderValue("Sender");
+        const a = this.getHeaderAddressValue("Sender");
         if (! a) {
             return null;
         }
         return a;
     }
 
-    set sender(emailAddress) { this.setHeaderSingleAddress("Sender", emailAddress); }
+    set sender(emailAddress) { this.setHeaderAddressValue("Sender", emailAddress); }
 
     /* dateMsec: BigInt */
     get dateMsec() {
-        const dateString = this.getHeaderValue("Date");
+        const dateString = this.getHeaderSingleStringValue("Date");
         if (! dateString) {
             return null;
         }
@@ -1610,13 +1987,13 @@ export class Message {
         return BigInt(dateMsec);
     }
 
-    set dateMsec(v) { setHeaderSingleString("Date", v); }
+    set dateMsec(v) { setHeaderSingleStringValue("Date", v); }
 
     /* From: EmailAddress[] */
     get hasFrom() { return this.hasHeader("From"); }
 
     get from() {
-        const a = this.getHeaderSingleArray("From");
+        const a = this.getHeaderSingleAddressArrayValue("From");
         if (! a) {
             return new EmailAddress();
         }
@@ -1624,7 +2001,7 @@ export class Message {
     }
 
     get fromName() {
-        const a = this.getHeaderSingleArray("From");
+        const a = this.getHeaderSingleAddressArrayValue("From");
         if (! a) {
             return null;
         }
@@ -1638,7 +2015,7 @@ export class Message {
     }
 
     get fromAddress() {
-        const a = this.getHeaderSingleArray("From");
+        const a = this.getHeaderSingleAddressArrayValue("From");
         if (! a) {
             return null;
         }
@@ -1651,68 +2028,71 @@ export class Message {
         return a[0].address;
     }
 
-    set from(emailAddress) { this.setHeaderSingleAddressArray("From", emailAddress); }
+    set from(emailAddress) { this.setHeaderSingleAddressArrayValue("From", emailAddress); }
 
     /* To: EmailAddress[] */
     get hasTo() { return this.hasHeader("To"); }
 
     get to() {
-        const a = this.getHeaderSingleArray("To");
+        const a = this.getHeaderSingleAddressArrayValue("To");
         if (! a) {
             return null;
         }
         return a;
     }
 
-    set to(emailAddresses) { this.setHeaderSingleAddressArray("To", emailAddresses); }
-    addTo(emailAddresses) { this.addToSingleAddressArray("To", emailAddresses); }
+    set to(emailAddresses) { this.setHeaderSingleAddressArrayValue("To", emailAddresses); }
+
+    addTo(emailAddress) { this.addToSingleAddressArray("To", emailAddress); }
 
     /* Cc: EmailAddress[] */
     get hasCc() { return this.hasHeader("Cc"); }
 
     get cc() {
-        const a = this.getHeaderSingleArray("Cc");
+        const a = this.getHeaderSingleAddressArrayValue("Cc");
         if (! a) {
             return null;
         }
         return a;
     }
 
-    set cc(emailAddresses) { this.setHeaderSingleAddressArray("Cc", emailAddresses); }
-    addCc(emailAddresses) { this.addToSingleAddressArray("Cc", emailAddresses); }
+    set cc(emailAddresses) { this.setHeaderSingleAddressArrayValue("Cc", emailAddresses); }
+
+    addCc(emailAddress) { this.addToSingleAddressArray("Cc", emailAddress); }
 
     /* Bcc: EmailAddress[] */
     get hasBcc() { return this.hasHeader("Bcc"); }
 
     get bcc() {
-        const a = this.getHeaderSingleArray("Bcc");
+        const a = this.getHeaderSingleAddressArrayValue("Bcc");
         if (! a) {
             return null;
         }
         return a;
     }
 
-    set bcc(emailAddresses) { this.setHeaderSingleAddressArray("Bcc", emailAddresses); }
-    addBcc(emailAddresses) { this.addToSingleAddressArray("Bcc", emailAddresses); }
+    set bcc(emailAddresses) { this.setHeaderSingleAddressArrayValue("Bcc", emailAddresses); }
+
+    addBcc(emailAddress) { this.addToSingleAddressArray("Bcc", emailAddress); }
 
     /* Subject: String */
     get hasSubject() { return this.hasHeader("Subject"); }
 
     get subject() {
-        const a = this.getHeaderValue("Subject");
+        const a = this.getHeaderSingleStringValue("Subject");
         if (! a) {
             return null;
         }
         return a;
     }
 
-    set subject(subject) { this.setHeaderSingleString("Subject", subject); }
+    set subject(subject) { this.setHeaderSingleStringValue("Subject", subject); }
 
     /* Message-Id: String */
     get hasMessageId() { return this.hasHeader("Message-Id"); }
 
     get messageId() {
-        const a = this.getHeaderValue("Message-Id");
+        const a = this.getHeaderSingleStringValue("Message-Id");
         if (! a) {
             return null;
         }
