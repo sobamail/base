@@ -48,7 +48,7 @@ MODULES = [
         "https://test.user.app.sobamail.com",
     ),
     (
-        genpath("..", "mbmgr", "MailboxManager.mjs"),
+        genpath("..", "mbmgr", "Mutator.mjs"),
         "https://mailboxmanager.core.app.sobamail.com",
     ),
     (
