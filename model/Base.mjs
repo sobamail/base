@@ -1039,7 +1039,7 @@ export class Message {
     #attachments;
     #bodyText;
     #bodyHtml;
-    #bodyData;
+    #bodyObject;
     #folderState = new Map();
     #cidCounter = 0;
     #cidSet = new Set();
@@ -1050,14 +1050,74 @@ export class Message {
         attachments = [],
         bodyText = null,
         bodyHtml = null,
-        bodyData = null,
+        bodyObject = null,
     } = {}) {
         this.#uuid = uuid;
         this.#headers = headers;
         this.#attachments = attachments;
         this.#bodyText = bodyText;
         this.#bodyHtml = bodyHtml;
-        this.#bodyData = bodyData;
+        this.#bodyObject = bodyObject;
+    }
+
+    static extractObject(message, meta) {
+        if (meta.location == "limbo") {
+            // by definition these messages have not been delivered yet so ignore them
+            return null;
+        }
+
+        if (meta.type == "task" || meta.type == "task-replay") {
+            // a task only has the data content, so just return it
+            return message;
+        }
+
+        if (meta.type == "message" && message.bodyObject !== undefined) {
+            // Here it's a structured email so let's do some digging to get to the data content
+            let content = message.bodyObject;
+            if (content === undefined) {
+                soba.log.error(`Unable to read message content`);
+                return null;
+            }
+
+            if (content instanceof ArrayBuffer) { // The data content could not be parsed correctly.
+                soba.log.error(`Message ${JSON.stringify(message)} contents were not recognized`);
+                return null;
+            }
+
+            if (! content.namespace) {
+                soba.log.error(`Message ${JSON.stringify(content)} null or empty namespace`);
+                return null;
+            }
+
+            if (! content.name) {
+                soba.log.error(`Message ${JSON.stringify(content)} null or empty name`);
+                return null;
+            }
+
+            if (content.name == "MessageTask"
+                    && content.namespace == "https://sobamail.com/module/mailboxmanager/v1") {
+                soba.log.error("MessageTask is not supposed to seep through to here");
+                return null;
+            }
+
+            // If it was a signed and/or encrypted message, it will be wrapped
+            // in an Envelope object, so let's dig further if that's the case.
+            if (content.name == "Envelope"
+                    && content.namespace == "https://sobamail.com/module/base/v1") {
+                let envelope = content.content;
+                if (envelope === undefined) {
+                    throw new Error(`Envelope is empty`);
+                }
+
+                content = envelope.content;
+            }
+
+            return content;
+        }
+
+        soba.log.error(`Unexpected event type: ${meta.type}`);
+
+        return null;
     }
 
     /* json serializer */
@@ -1074,8 +1134,8 @@ export class Message {
             retval.bodyHtml = this.#bodyHtml;
         }
 
-        if (this.bodyData) {
-            retval.bodyData = this.#bodyData;
+        if (this.bodyObject) {
+            retval.bodyObject = this.#bodyObject;
         }
 
         if (this.attachments.length > 0) {
@@ -1100,8 +1160,8 @@ export class Message {
             retval.bodyHtml = this.#bodyHtml.toMsgpack();
         }
 
-        if (this.bodyData) {
-            retval.bodyData = this.#bodyData;
+        if (this.bodyObject) {
+            retval.bodyObject = this.#bodyObject;
         }
 
         if (this.attachments.length > 0) {
@@ -1261,7 +1321,7 @@ export class Message {
     get attachments() { return this.#attachments; }
     get bodyText() { return this.#bodyText; }
     get bodyHtml() { return this.#bodyHtml; }
-    get bodyData() { return this.#bodyData; }
+    get bodyObject() { return this.#bodyObject; }
     get folderState() { return this.#folderState; }
 
     /* Trivial setters */
@@ -1313,7 +1373,7 @@ export class Message {
         this.#bodyHtml = v;
     }
 
-    set bodyData(v) {
+    set bodyObject(v) {
         if (! (v instanceof MessageBodyData)) {
             v = new MessageBodyData(v);
         }
@@ -1325,7 +1385,7 @@ export class Message {
         }
 
         this.#cidSet.add(v.contentId);
-        this.#bodyData = v;
+        this.#bodyObject = v;
     }
 
     set attachments(attachments) {

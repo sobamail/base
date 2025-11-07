@@ -4,7 +4,7 @@ import "soba://computer/R1"
 import {
     DeleteRow,
     NotFoundError,
-} from "https://sobamail.com/module/base/v1?sha224=3r_5NPXDIX27Veoa5ieNq7kM6Bhv0OPZPxpVVw";
+} from "https://sobamail.com/module/base/v1?sha224=lHPRerLbiqHkAShgnv6sjCjr_ReFSXlDJTe6Ew";
 import {
     AddDomain,
     AddUser,
@@ -110,10 +110,10 @@ export default class UserManager {
             // dispatch function
             this.on_structured(message);
         }
-        else if (meta.type == "message" && message.dataBody !== undefined) {
+        else if (meta.type == "message" && message.bodyObject !== undefined) {
             // Here it's a structured email so we need to do some digging
             // to get to the content object
-            let content = soba.mail.readContent(message, message.dataBody.cid);
+            let content = soba.mail.readContent(message, message.bodyObject.cid);
             if (content === undefined) {
                 throw new Error(`Unable to read message content`);
             }

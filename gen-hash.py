@@ -55,6 +55,10 @@ MODULES = [
         genpath("..", "responder", "Mutator.mjs"),
         "https://responder.test.user.app.sobamail.com",
     ),
+    (
+        genpath("..", "counter", "Mutator.mjs"),
+        "https://counter.test.user.app.sobamail.com",
+    ),
 ]
 
 # format
