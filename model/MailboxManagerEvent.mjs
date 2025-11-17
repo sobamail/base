@@ -1,7 +1,12 @@
 ﻿
 export const namespace = "https://sobamail.com/module/mailboxmanager/v1"
 
-import "soba://computer/R1"
+import "soba://computer/R2"
+
+// Internal object not to be produced by user code
+export class MessageTask {
+    static KEY = `{${namespace}}${this.name}`;
+};
 
 export class InitializeFolders {
     static KEY = `{${namespace}}${this.name}`;
@@ -229,73 +234,6 @@ export class DeliverMessage {
     toString() { return `DeliverMessage("${this.message}", "${this.address}")`; }
 }
 
-export class GetRules {
-    static KEY = `{${namespace}}${this.name}`;
-
-    constructor({}) {}
-
-    asText(locale) { return `Get delivery rules`; }
-
-    toString() { return `GetRules()`; }
-}
-
-export class AddRule {
-    static KEY = `{${namespace}}${this.name}`;
-
-    constructor({uuid = null, label = null}) {
-        this.uuid = uuid;
-        this.label = label;
-    }
-
-    asText(locale) { return `Put delivery rule`; }
-
-    toString() { return `GetRules()`; }
-}
-
-export class AddHeaderCondition {
-    static KEY = `{${namespace}}${this.name}`;
-
-    constructor({rule = null, key = null, op = null, value = null}) {
-        this.rule = rule;
-        this.key = key;
-        this.op = op;
-        this.value = value;
-    }
-
-    asText(locale) { return `Rule ${this.rule} Header ${this.key} ${this.op} ${this.value}`; }
-
-    toString() {
-        return `AddHeaderCondition(${this.rule}, ${this.key}, ${this.op}, ${this.value})`;
-    }
-}
-
-export class AddBodyCondition {
-    static KEY = `{${namespace}}${this.name}`;
-
-    constructor({rule = null, op = null, value = null}) {
-        this.rule = rule;
-        this.op = op;
-        this.value = value;
-    }
-
-    asText(locale) { return `Rule ${this.rule} Body ${this.op} ${this.value}`; }
-
-    toString() { return `AddBodyCondition(${this.op}, ${this.value})`; }
-}
-
-export class AddFileIntoAction {
-    static KEY = `{${namespace}}${this.name}`;
-
-    constructor({rule = null, target = null}) {
-        this.rule = rule;
-        this.target = target;
-    }
-
-    asText(locale) { return `Rule ${this.uuid} Action: fileinto ${this.target}`; }
-
-    toString() { return `AddFileIntoAction(${this.uuid}, ${this.target})`; }
-}
-
 export class DeliveryEvent {
     static KEY = `{${namespace}}${this.name}`;
 
@@ -324,8 +262,3 @@ export class DeliveryEvent {
                 ` ${this.destaddr}, ${this.statuscode}, ${this.statustext}, ${this.statusdata}, ")`;
     }
 }
-
-// Internal object not to be produced by user code
-export class MessageTask {
-    static KEY = `{${namespace}}${this.name}`;
-};

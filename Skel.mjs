@@ -18,11 +18,11 @@
  * Have fun!
  */
 
-import "soba://computer/R1";
+import "soba://computer/R2";
 
 import {
     DeleteRow,
-} from "https://sobamail.com/module/base/v1?sha224=lHPRerLbiqHkAShgnv6sjCjr_ReFSXlDJTe6Ew";
+} from "https://sobamail.com/module/base/v1?sha224=LbfSklK0ZN9Fqv2PUhX7gN4BidTZ0oqseuYDTA";
 
 export default class Mutator {
     static id = "test.user.app.sobamail.com";

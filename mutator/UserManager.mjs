@@ -1,14 +1,14 @@
 
-import "soba://computer/R1"
+import "soba://computer/R2"
 
 import {
     DeleteRow,
     NotFoundError,
-} from "https://sobamail.com/module/base/v1?sha224=lHPRerLbiqHkAShgnv6sjCjr_ReFSXlDJTe6Ew";
+} from "https://sobamail.com/module/base/v1?sha224=LbfSklK0ZN9Fqv2PUhX7gN4BidTZ0oqseuYDTA";
 import {
     AddDomain,
     AddUser,
-} from "https://sobamail.com/module/usermanager/v1?sha224=5D4Hw_mQ32DNO2JqRWkjN6tgZBwrURWV543d1g";
+} from "https://sobamail.com/module/usermanager/v1?sha224=0FUhLpMkm1K4KxNV4isVjN1Pn8StAcXoqNujtw";
 
 export default class UserManager {
     static id = "usermanager.app.sobamail.com";

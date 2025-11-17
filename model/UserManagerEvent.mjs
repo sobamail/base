@@ -1,7 +1,7 @@
 
 export const namespace = "https://sobamail.com/module/usermanager/v1"
 
-import "soba://computer/R1"
+import "soba://computer/R2"
 
 export class AddDomain {
     static KEY = `{${namespace}}${this.name}`;

@@ -8,28 +8,70 @@
 
 export const namespace = "https://sobamail.com/module/base/v1";
 
-import "soba://computer/R1"
+import "soba://computer/R2"
 
 function isString(s) { return (typeof s === "string" || s instanceof String); }
 
-export class DeleteRow {
+export class NamedDigest {
     static KEY = `{${namespace}}${this.name}`;
 
-    constructor({database = null, table = null, hashAlgorithm = null, hashDigest = null} = {}) {
-        this.database = database;
-        this.table = table;
-        this.hashAlgorithm = hashAlgorithm;
-        this.hashDigest = hashDigest;
+    constructor({algo = null, value = null} = {}) {
+        this.algo = algo;
+        this.value = value;
+    }
+
+    validate() {
+        if (this.algo === "sha512") {
+            if (! this.value instanceof ArrayBuffer) {
+                throw new Error(`Digest value must be an ArrayBuffer of byteLength 64`);
+            }
+            if (this.value.byteLength != 64) {
+                throw new Error(`Digest value must be an ArrayBuffer of byteLength 64`);
+            }
+        }
+        else {
+            throw new Error(`Unsupported digest algo: ${JSON.stringify(this.algo)}}`);
+        }
+    }
+
+    toString() { return `[${this.algo},${JSON.stringify(this.digest)}]` }
+}
+
+export class DeleteRow {
+    static KEY = `{${namespace}}${this.name}`;
+}
+
+export class UpdateRow {
+    static KEY = `{${namespace}}${this.name}`;
+
+    constructor({
+        column = null,
+        op = null,
+        value = null,
+    } = {}) {
+        this.column = column;
+        this.op = op;
+        this.value = value;
+    }
+
+    validate() {
+
+        if (! (isString(this.column) && this.column.length > 0)) {
+            throw new Error(`Invalid column value '${this.column}'. Must be a non-empty String`);
+        }
+
+        if (! (isString(this.op) && this.op.length > 0)) {
+            throw new Error(`Invalid column value '${this.op}'. Must be a non-empty String`);
+        }
     }
 
     asText(locale) {
-        return `Delete row ${this.hashAlgorithm}(${this.hashDigest}) from database '${
-                this.database}' table '${this.table}'`;
+        return `Apply operation ${this.op}${JSON.stringify(this.value)} to value in column ${
+                this.column}`;
     }
 
     toString() {
-        return `DeleteRow('${this.database}', '${this.table}', '${this.hashAlgorithm}', '${
-                this.hashDigest}")`;
+        return `UpdateRow('${this.column}', '${this.op}', ${JSON.stringify(this.value)}})`;
     }
 }
 
@@ -515,10 +557,7 @@ export class EmailAddress {
     }
 }
 
-export class MessageAttributes {
-    // TODO
-    constructor({} = {}) {}
-}
+export class MessageAttributes {}
 
 export class MessageBody {
     static Inline = 1;
@@ -534,8 +573,8 @@ export class MessageBody {
         blobs = [],
         charset = null,
     } = {}) {
-        // charset assignment must be made before content assignment since content setter in child
-        // classes can override charset value
+        // charset assignment must be made before content assignment since content setter in
+        // child classes can override charset value
         this.charset = charset;
 
         this.content = content;
