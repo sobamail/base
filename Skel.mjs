@@ -22,7 +22,7 @@ import "soba://computer/R2";
 
 import {
     DeleteRow,
-} from "https://sobamail.com/module/base/v1?sha224=LbfSklK0ZN9Fqv2PUhX7gN4BidTZ0oqseuYDTA";
+} from "https://sobamail.com/module/base/v1?sha224=7VxiNiRp9EhKFTmiYDW3d_Cu-1_TVdnQdEWBjw";
 
 export default class Mutator {
     static id = "test.user.app.sobamail.com";

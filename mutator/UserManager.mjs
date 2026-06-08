@@ -1,14 +1,14 @@
 
-import "soba://computer/R2"
+import "soba://computer/R2";
 
 import {
     DeleteRow,
     NotFoundError,
-} from "https://sobamail.com/module/base/v1?sha224=LbfSklK0ZN9Fqv2PUhX7gN4BidTZ0oqseuYDTA";
+} from "https://sobamail.com/module/base/v1?sha224=4H9Uzh2cgGyVH74hQ1Iws3K7eO69z28pzdqUMQ";
 import {
     AddDomain,
     AddUser,
-} from "https://sobamail.com/module/usermanager/v1?sha224=0FUhLpMkm1K4KxNV4isVjN1Pn8StAcXoqNujtw";
+} from "https://sobamail.com/module/usermanager/v1?sha224=m7SCNzpAMh30qiUIRuf1xTb28FhAZD8QsreXfA";
 
 export default class UserManager {
     static id = "usermanager.app.sobamail.com";
@@ -186,7 +186,7 @@ export default class UserManager {
 
         if (content.uuid !== null) {
             try {
-                return soba.data.find("users", {content.uuid});
+                return soba.data.find("users", {uuid : content.uuid});
             }
             catch (e) {
                 if (e instanceof NotFoundError) {
@@ -200,7 +200,7 @@ export default class UserManager {
 
         const fragments = email.split("@");
         if (fragments.length != 2) {
-            throw new Error(`Invalid email ${content.email}`)
+            throw new Error(`Invalid email ${content.email}`);
         }
 
         const domain = fragments[1];
